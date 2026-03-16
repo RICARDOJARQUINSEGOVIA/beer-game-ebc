@@ -7,7 +7,7 @@ import os
 DB_FILE = "beer_game_db.json"
 ROLES = ["Minorista", "Mayorista", "Distribuidor", "Fábrica"]
 
-# Demanda oculta y Noticias para generar "Ruido" en el sistema (Psicología del Efecto Látigo)
+# Demanda oculta y Noticias
 DEMANDA_CLIENTE = {str(i): (4 if i <= 4 else 8) for i in range(1, 50)}
 NOTICIAS = {
     1: "🟢 El mercado está tranquilo. Las ventas fluyen con normalidad.",
@@ -36,11 +36,48 @@ def guardar_bd(datos):
     with open(DB_FILE, "w") as f:
         json.dump(datos, f)
 
-# --- INICIO DE LA APP ---
-st.set_page_config(page_title="Beer Game - EBC", page_icon="🍺", layout="centered")
+# --- INICIO DE LA APP Y CONFIGURACIÓN ---
+st.set_page_config(page_title="Beer Game - EBC", page_icon="🍺", layout="wide")
 
-st.title("🍺 El Juego de la Cerveza: Edición EBC")
-st.markdown("*¿Podrás sobrevivir al Efecto Látigo sin quebrar a tu empresa?*")
+# --- GESTIÓN DE SESIÓN (LOGIN PERSISTENTE) ---
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+    st.session_state.rol = None
+
+# PANTALLA DE LOGIN Y REGLAS (Si no ha iniciado sesión)
+if not st.session_state.logged_in:
+    st.title("🍺 El Juego de la Cerveza: Edición EBC")
+    st.markdown("*Simulador de Logística Integral y Efecto Látigo*")
+    
+    col_login, col_reglas = st.columns([1, 2])
+    
+    with col_login:
+        st.subheader("🔐 Acceso de Seguridad")
+        rol_input = st.selectbox("Selecciona tu División:", ["Profesor (Monitor)"] + ROLES)
+        password_input = st.text_input("Ingresa tu PIN de acceso:", type="password")
+        
+        if st.button("Iniciar Sesión", type="primary", use_container_width=True):
+            if password_input == PASSWORDS.get(rol_input):
+                st.session_state.logged_in = True
+                st.session_state.rol = rol_input
+                st.rerun()
+            else:
+                st.error("⚠️ PIN incorrecto. Intenta de nuevo.")
+                
+    with col_reglas:
+        st.info("""
+        **📋 REGLAS OPERATIVAS DE LA CADENA DE SUMINISTRO:**
+        
+        * **Demanda Base:** Históricamente, el cliente final pide **4 cajas por semana**.
+        * **Nivel de Servicio:** El objetivo de toda la cadena es cumplir con el **100% de la demanda** (Cero ventas perdidas).
+        * **Política de Costos:** * 📦 Mantener inventario sobrante cuesta **$0.50** por caja a la semana. 
+            * 🚫 Quedarse en desabasto (venta perdida) cuesta **$1.00** por caja.
+        * **Regla de Comunicación:** Está estrictamente prohibido hablar, hacer señas o compartir pantallas con los otros eslabones de la cadena.
+        """)
+    st.stop() # Detiene la ejecución aquí si no están logueados
+
+# --- SI YA INICIÓ SESIÓN (EL JUEGO) ---
+rol = st.session_state.rol
 
 bd = cargar_bd()
 semana_actual = bd["semana"]
@@ -50,30 +87,30 @@ if str_semana not in bd["pedidos"]:
     bd["pedidos"][str_semana] = {}
     guardar_bd(bd)
 
-# --- MENÚ LATERAL Y LOGIN ---
-st.sidebar.title("🔐 Acceso de Seguridad")
-rol = st.sidebar.selectbox("Selecciona tu División:", ["Profesor (Monitor)"] + ROLES)
-password = st.sidebar.text_input("Ingresa tu PIN de acceso:", type="password")
+# --- MENÚ LATERAL (SIDEBAR) ---
+st.sidebar.success(f"👤 Conectado como: **{rol}**")
+if st.sidebar.button("🚪 Cerrar Sesión"):
+    st.session_state.logged_in = False
+    st.session_state.rol = None
+    st.rerun()
 
-if password != PASSWORDS[rol]:
-    st.warning("⚠️ Ingresa el PIN correcto para acceder a tu panel de control.")
-    st.sidebar.info("Tip para el profe: El PIN del profesor es 'adminebc'. Los de los alumnos son 1111, 2222, 3333 y 4444.")
-    st.stop() # Detiene la ejecución para que no vean el resto de la página
-
-st.sidebar.success("Acceso concedido.")
 st.sidebar.divider()
 st.sidebar.metric(label="📅 Semana Actual", value=semana_actual)
 
+with st.sidebar.expander("📋 Recordatorio de Costos"):
+    st.write("- **Meta:** 100% Nivel de Servicio")
+    st.write("- **Costo Inventario:** $0.50/caja")
+    st.write("- **Costo Desabasto:** $1.00/caja")
+
 # --- VISTA DEL PROFESOR (MONITOR) ---
 if rol == "Profesor (Monitor)":
-    st.header("👑 Centro de Mando Directivo")
-    st.write("Bienvenido, Profesor Jarquin. Aquí controla el flujo del juego.")
+    st.title("👑 Centro de Mando Directivo")
     
     col_info1, col_info2 = st.columns(2)
     with col_info1:
         st.info(f"**Semana Actual:** {semana_actual}")
     with col_info2:
-        noticia_actual = NOTICIAS.get(semana_actual, "Noticias sin novedades importantes esta semana.")
+        noticia_actual = NOTICIAS.get(semana_actual, "Sin novedades importantes esta semana.")
         st.warning(f"**Titular de la Semana:** {noticia_actual}")
 
     st.subheader("Estatus de los Equipos")
@@ -84,7 +121,7 @@ if rol == "Profesor (Monitor)":
     for i, r in enumerate(ROLES):
         with col_roles[i]:
             if r in pedidos_semana:
-                st.success(f"**{r}**\n\n📦 Envió pedido")
+                st.success(f"**{r}**\n\n📦 Pidió: {pedidos_semana[r]}")
             else:
                 st.error(f"**{r}**\n\n⏳ Pensando...")
                 todos_pidieron = False
@@ -92,22 +129,23 @@ if rol == "Profesor (Monitor)":
     st.divider()
     
     if todos_pidieron:
-        st.success("✅ Toda la cadena ha emitido sus órdenes. El mercado está listo para avanzar.")
+        st.success("✅ Toda la cadena ha emitido sus órdenes. Puedes avanzar el tiempo.")
         if st.button(f"🚀 Avanzar a la Semana {semana_actual + 1}", type="primary", use_container_width=True):
             bd["semana"] += 1
             guardar_bd(bd)
             st.rerun()
     else:
         st.warning("Faltan decisiones en la cadena. No puedes avanzar el tiempo aún.")
+        if st.button("🔄 Refrescar Estatus"):
+            st.rerun()
 
     with st.expander("⚙️ Opciones de Administrador / Reiniciar"):
-        st.write("Usa esto solo si se equivocaron o terminó la clase.")
         if st.button("🚨 Reiniciar Juego Completo"):
             guardar_bd({"semana": 1, "pedidos": {}})
             st.rerun()
 
     st.divider()
-    st.subheader("📈 El Efecto Látigo en Vivo")
+    st.subheader("📈 Análisis Financiero y Efecto Látigo")
     
     historial = []
     for sem in range(1, semana_actual + 1):
@@ -119,13 +157,36 @@ if rol == "Profesor (Monitor)":
         historial.append(fila)
     
     df_grafica = pd.DataFrame(historial).set_index("Semana")
+    
+    # --- CÁLCULO DE COSTOS ESTIMADOS ---
+    if not df_grafica.empty:
+        total_demanda = df_grafica["Demanda Consumidor"].sum()
+        total_fabrica = df_grafica["Fábrica"].sum() if "Fábrica" in df_grafica.columns else 0
+        
+        # Balance del sistema: Todo lo que entró al sistema (Fábrica) vs lo que salió (Demanda)
+        balance = total_fabrica - total_demanda
+        
+        col_met1, col_met2, col_met3 = st.columns(3)
+        with col_met1:
+            st.metric("Demanda Total (Salidas del Sistema)", total_demanda)
+        with col_met2:
+            st.metric("Producción Total (Entradas al Sistema)", total_fabrica)
+        with col_met3:
+            if balance > 0:
+                costo = balance * 0.50
+                st.metric("Penalización (Costo por Inventario)", f"${costo:.2f}", delta=f"+{balance} cajas de exceso", delta_color="inverse")
+            elif balance < 0:
+                costo = abs(balance) * 1.00
+                st.metric("Penalización (Ventas Perdidas)", f"${costo:.2f}", delta=f"{balance} cajas faltantes", delta_color="inverse")
+            else:
+                st.metric("Estado de la Cadena", "Equilibrio Perfecto", delta="$0.00 penalización", delta_color="normal")
+
     st.line_chart(df_grafica, height=400)
 
 # --- VISTA DE LOS ALUMNOS (JUGADORES) ---
 else:
-    st.header(f"🏢 División: {rol}")
+    st.title(f"🏢 División: {rol}")
     
-    # Noticiero para generar presión psicológica
     noticia = NOTICIAS.get(semana_actual, "")
     if noticia:
         st.error(f"📰 **BOLETÍN DEL MERCADO:** {noticia}")
@@ -136,16 +197,18 @@ else:
     
     if ya_pidio:
         st.success("✅ Orden de compra enviada exitosamente al proveedor.")
-        st.metric(label="Tu pedido emitido fue de:", value=f"{bd['pedidos'][str_semana][rol]} unidades")
+        st.metric(label="Tu pedido emitido fue de:", value=f"{bd['pedidos'][str_semana][rol]} cajas")
         st.write("---")
-        st.write("☕ El reloj está en pausa. Espera a que el resto de la cadena termine de analizar sus números para avanzar a la siguiente semana.")
+        st.write("☕ El reloj está en pausa. Espera a que el resto de la cadena termine su análisis para avanzar a la siguiente semana.")
+        
+        if st.button("🔄 Actualizar Estatus para ver si ya avanzamos", use_container_width=True):
+            st.rerun()
     else:
         st.warning("⚠️ SE REQUIERE ACCIÓN: Ingresa tu orden de compra.")
-        st.write("Recuerda tu objetivo logístico: Minimizar costos de inventario sin caer en desabasto.")
         
         with st.form(key=f"form_pedido_{semana_actual}"):
             st.write("### Hoja de Pedido - Semana", semana_actual)
-            cantidad = st.number_input("Cantidad a solicitar a tu proveedor (cajas):", min_value=0, max_value=1000, value=0, step=1)
+            cantidad = st.number_input("Cantidad a solicitar a tu proveedor (cajas):", min_value=0, max_value=2000, value=0, step=1)
             
             submit = st.form_submit_button("Firmar y Enviar Orden 📝", type="primary", use_container_width=True)
             
