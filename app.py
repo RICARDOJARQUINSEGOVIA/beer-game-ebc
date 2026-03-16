@@ -158,28 +158,47 @@ if rol == "Profesor (Monitor)":
     
     df_grafica = pd.DataFrame(historial).set_index("Semana")
     
-    # --- CÁLCULO DE COSTOS ESTIMADOS ---
+    # --- CÁLCULO DE COSTOS ESTIMADOS Y EXPLICACIÓN CLARA ---
     if not df_grafica.empty:
         total_demanda = df_grafica["Demanda Consumidor"].sum()
         total_fabrica = df_grafica["Fábrica"].sum() if "Fábrica" in df_grafica.columns else 0
         
-        # Balance del sistema: Todo lo que entró al sistema (Fábrica) vs lo que salió (Demanda)
+        # Balance del sistema: Todo lo que entró (Fábrica) vs lo que salió (Demanda)
         balance = total_fabrica - total_demanda
         
         col_met1, col_met2, col_met3 = st.columns(3)
         with col_met1:
-            st.metric("Demanda Total (Salidas del Sistema)", total_demanda)
+            st.metric("Demanda Total (Salidas)", total_demanda, help="Suma acumulada de todas las cajas requeridas por el consumidor final.")
         with col_met2:
-            st.metric("Producción Total (Entradas al Sistema)", total_fabrica)
+            st.metric("Producción Total (Entradas)", total_fabrica, help="Suma acumulada de todas las cajas inyectadas al sistema por la Fábrica.")
         with col_met3:
             if balance > 0:
                 costo = balance * 0.50
-                st.metric("Penalización (Costo por Inventario)", f"${costo:.2f}", delta=f"+{balance} cajas de exceso", delta_color="inverse")
+                st.metric("Penalización Acumulada", f"${costo:.2f}", delta=f"+{balance} cajas atrapadas (Exceso)", delta_color="inverse", help="Se cobra $0.50 por cada caja sobrante.")
             elif balance < 0:
                 costo = abs(balance) * 1.00
-                st.metric("Penalización (Ventas Perdidas)", f"${costo:.2f}", delta=f"{balance} cajas faltantes", delta_color="inverse")
+                st.metric("Penalización Acumulada", f"${costo:.2f}", delta=f"{balance} cajas faltantes (Escasez)", delta_color="inverse", help="Se cobra $1.00 por cada venta perdida.")
             else:
-                st.metric("Estado de la Cadena", "Equilibrio Perfecto", delta="$0.00 penalización", delta_color="normal")
+                st.metric("Estado de la Cadena", "Equilibrio", delta="$0.00 penalización", delta_color="normal")
+
+        # Explicación pedagógica para la clase
+        with st.expander("📖 ¿Cómo se calcula esta penalización y por qué ocurre? (Abre para explicar a la clase)"):
+            st.markdown(f"""
+            **La Matemática del Sistema:**
+            El costo financiero no se calcula de forma aislada, sino evaluando la Cadena de Suministro como **un solo sistema**. Hasta la semana {semana_actual}:
+            
+            1. El mercado pidió un total de **{total_demanda} cajas**.
+            2. La Fábrica inyectó al sistema un total de **{total_fabrica} cajas**.
+            3. La diferencia entre lo que entra y sale es de **{balance} cajas**.
+            
+            **¿Por qué hay un desfase? (El Efecto Látigo)**
+            Cuando el Minorista se asusta y pide de más, la información viaja con retraso (desfase de semanas). La Fábrica produce creyendo que hay una súper demanda. Como resultado, las cajas se quedan **"atrapadas"** en los almacenes intermedios (Distribuidor y Mayorista) o en los camiones de transporte.
+            
+            * 🔴 **Si el balance es Positivo (Exceso):** Hay {balance if balance > 0 else 0} cajas atoradas en la cadena. A un costo de mantenimiento de **$0.50** por caja, la empresa está quemando flujo de efectivo.
+            * 🔴 **Si el balance es Negativo (Desabasto):** Faltaron {abs(balance) if balance < 0 else 0} cajas para surtir. A un costo de oportunidad de **$1.00** por caja, la empresa está perdiendo clientes y ventas directas.
+            
+            *Conclusión Logística: Si los 4 eslabones hubieran visto la demanda real del cliente desde la semana 1, la fábrica habría producido exactamente {total_demanda} cajas, la penalización sería $0.00 y la empresa sería altamente rentable.*
+            """)
 
     st.line_chart(df_grafica, height=400)
 
